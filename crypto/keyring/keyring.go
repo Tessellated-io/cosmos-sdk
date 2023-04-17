@@ -22,6 +22,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/keys/bcrypt"
 	"github.com/cosmos/cosmos-sdk/crypto/ledger"
 	"github.com/cosmos/cosmos-sdk/crypto/types"
+	"github.com/cosmos/cosmos-sdk/crypto/yubi"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 )
@@ -53,7 +54,7 @@ type Keyring interface {
 	List() ([]Info, error)
 
 	// Supported signing algorithms for Keyring and Ledger respectively.
-	SupportedAlgorithms() (SigningAlgoList, SigningAlgoList)
+	SupportedAlgorithms() (SigningAlgoList, SigningAlgoList, SigningAlgoList)
 
 	// Key and KeyByAddress return keys by uid and address respectively.
 	Key(uid string) (Info, error)
@@ -150,6 +151,8 @@ type Options struct {
 	SupportedAlgos SigningAlgoList
 	// supported signing algorithms for Ledger
 	SupportedAlgosLedger SigningAlgoList
+	// supported signing algorithms for YubiKey
+	SupportedAlgosYubi SigningAlgoList
 }
 
 // NewInMemory creates a transient keyring useful for testing
@@ -204,6 +207,7 @@ func newKeystore(kr keyring.Keyring, opts ...Option) keystore {
 	options := Options{
 		SupportedAlgos:       SigningAlgoList{hd.Secp256k1},
 		SupportedAlgosLedger: SigningAlgoList{hd.Secp256k1},
+		SupportedAlgosYubi:	  SigningAlgoList{hd.Secp256k1},
 	}
 
 	for _, optionFn := range opts {
@@ -382,6 +386,23 @@ func (ks keystore) SignByAddress(address sdk.Address, msg []byte) ([]byte, types
 	return ks.Sign(key.GetName(), msg)
 }
 
+func (ks keystore) SaveYubiKey(uid string, algo SignatureAlgo, hrp string, coinType, account, index uint32) (Info, error) {
+	if !ks.options.SupportedAlgosYubi.Contains(algo) {
+		return nil, fmt.Errorf(
+			"%w: signature algo %s is not defined in the keyring options",
+			ErrUnsupportedSigningAlgo, algo.Name(),
+		)
+	}
+
+	priv, err := yubi.NewPrivKeySecp256k1Unsafe()
+	// priv, _, err := ledger.NewPrivKeySecp256k1(*hdPath, hrp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to yubihsm: %w", err)
+	}
+
+	return ks.writeYubiKey(uid, priv.PubKey(), algo.Name())
+}
+
 func (ks keystore) SaveLedgerKey(uid string, algo SignatureAlgo, hrp string, coinType, account, index uint32) (Info, error) {
 	if !ks.options.SupportedAlgosLedger.Contains(algo) {
 		return nil, fmt.Errorf(
@@ -402,6 +423,15 @@ func (ks keystore) SaveLedgerKey(uid string, algo SignatureAlgo, hrp string, coi
 
 func (ks keystore) writeLedgerKey(name string, pub types.PubKey, path hd.BIP44Params, algo hd.PubKeyType) (Info, error) {
 	info := newLedgerInfo(name, pub, path, algo)
+	if err := ks.writeInfo(info); err != nil {
+		return nil, err
+	}
+
+	return info, nil
+}
+
+func (ks keystore) writeYubiKey(name string, pub types.PubKey, algo hd.PubKeyType) (Info, error) {
+	info := newYubiInfo(name, pub, algo)
 	if err := ks.writeInfo(info); err != nil {
 		return nil, err
 	}
@@ -597,9 +627,9 @@ func (ks keystore) Key(uid string) (Info, error) {
 }
 
 // SupportedAlgorithms returns the keystore Options' supported signing algorithm.
-// for the keyring and Ledger.
-func (ks keystore) SupportedAlgorithms() (SigningAlgoList, SigningAlgoList) {
-	return ks.options.SupportedAlgos, ks.options.SupportedAlgosLedger
+// for the keyring, Ledger and YubiHSM2.
+func (ks keystore) SupportedAlgorithms() (SigningAlgoList, SigningAlgoList, SigningAlgoList) {
+	return ks.options.SupportedAlgos, ks.options.SupportedAlgosLedger, ks.options.SupportedAlgosYubi
 }
 
 func SignWithYubi(info Info, msg []byte) (sig []byte, pub types.PubKey, err error) {

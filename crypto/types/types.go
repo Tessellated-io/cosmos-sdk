@@ -29,6 +29,10 @@ type LedgerPrivKey interface {
 	Type() string
 }
 
+type YubiPrivKey interface {
+	PubKey() PubKey
+}
+
 // PrivKey defines a private key and extends proto.Message. For now, it extends
 // LedgerPrivKey (see godoc for LedgerPrivKey). Ultimately, we should remove
 // LedgerPrivKey and add its methods here directly.
