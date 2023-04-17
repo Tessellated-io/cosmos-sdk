@@ -358,6 +358,9 @@ func (ks keystore) Sign(uid string, msg []byte) ([]byte, types.PubKey, error) {
 	case ledgerInfo:
 		return SignWithLedger(info, msg)
 
+	case yubiInfo:
+		return SignWithYubi(info, msg)
+
 	case offlineInfo, multiInfo:
 		return nil, info.GetPubKey(), errors.New("cannot sign with offline keys")
 	}
@@ -597,6 +600,10 @@ func (ks keystore) Key(uid string) (Info, error) {
 // for the keyring and Ledger.
 func (ks keystore) SupportedAlgorithms() (SigningAlgoList, SigningAlgoList) {
 	return ks.options.SupportedAlgos, ks.options.SupportedAlgosLedger
+}
+
+func SignWithYubi(info Info, msg []byte) (sig []byte, pub types.PubKey, err error) {
+	return nil, nil, nil
 }
 
 // SignWithLedger signs a binary message with the ledger device referenced by an Info object
