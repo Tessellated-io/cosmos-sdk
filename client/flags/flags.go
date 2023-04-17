@@ -44,6 +44,7 @@ const (
 	FlagHome             = tmcli.HomeFlag
 	FlagKeyringDir       = "keyring-dir"
 	FlagUseLedger        = "ledger"
+	FlagUseYubi        = "yubi"
 	FlagChainID          = "chain-id"
 	FlagNode             = "node"
 	FlagHeight           = "height"

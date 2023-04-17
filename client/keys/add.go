@@ -69,6 +69,7 @@ Example:
 	f.String(FlagPublicKey, "", "Parse a public key in JSON format and saves key info to <name> file.")
 	f.BoolP(flagInteractive, "i", false, "Interactively prompt user for BIP39 passphrase and mnemonic")
 	f.Bool(flags.FlagUseLedger, false, "Store a local reference to a private key on a Ledger device")
+	f.Bool(flags.FlagUseYubi, false, "Store a local reference to a private key on a YubiHSM2 device")
 	f.Bool(flagRecover, false, "Provide seed phrase to recover existing key instead of creating")
 	f.Bool(flagNoBackup, false, "Don't print out seed phrase (if others are watching the terminal)")
 	f.Bool(flags.FlagDryRun, false, "Perform action, but don't add key to local keystore")
@@ -194,6 +195,7 @@ func runAddCmd(ctx client.Context, cmd *cobra.Command, args []string, inBuf *buf
 	index, _ := cmd.Flags().GetUint32(flagIndex)
 	hdPath, _ := cmd.Flags().GetString(flagHDPath)
 	useLedger, _ := cmd.Flags().GetBool(flags.FlagUseLedger)
+	useYubi, _ := cmd.Flags().GetBool(flags.FlagUseYubi)
 
 	if len(hdPath) == 0 {
 		hdPath = hd.CreateHDPath(coinType, account, index).String()
@@ -206,6 +208,16 @@ func runAddCmd(ctx client.Context, cmd *cobra.Command, args []string, inBuf *buf
 		bech32PrefixAccAddr := sdk.GetConfig().GetBech32AccountAddrPrefix()
 
 		info, err := kb.SaveLedgerKey(name, algo, bech32PrefixAccAddr, coinType, account, index)
+		if err != nil {
+			return err
+		}
+
+		return printCreate(cmd, info, false, "", outputFormat)
+	}
+	if useYubi {
+		bech32PrefixAccAddr := sdk.GetConfig().GetBech32AccountAddrPrefix()
+
+		info, err := kb.SaveYubiKey(name, algo, bech32PrefixAccAddr, coinType, account, index)
 		if err != nil {
 			return err
 		}

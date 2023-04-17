@@ -79,6 +79,8 @@ type Keyring interface {
 	// SaveLedgerKey retrieves a public key reference from a Ledger device and persists it.
 	SaveLedgerKey(uid string, algo SignatureAlgo, hrp string, coinType, account, index uint32) (Info, error)
 
+	SaveYubiKey(uid string, algo SignatureAlgo, hrp string, coinType, account, index uint32) (Info, error)
+
 	// SavePubKey stores a public key and returns the persisted Info structure.
 	SavePubKey(uid string, pubkey types.PubKey, algo hd.PubKeyType) (Info, error)
 
