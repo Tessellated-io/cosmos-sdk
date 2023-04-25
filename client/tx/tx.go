@@ -109,8 +109,9 @@ func BroadcastTx(clientCtx client.Context, txf Factory, msgs ...sdk.Msg) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("Yah this is building")
 
-	if !clientCtx.SkipConfirm {
+	// if !clientCtx.SkipConfirm {
 		out, err := clientCtx.TxConfig.TxJSONEncoder()(tx.GetTx())
 		if err != nil {
 			return err
@@ -125,18 +126,27 @@ func BroadcastTx(clientCtx client.Context, txf Factory, msgs ...sdk.Msg) error {
 			_, _ = fmt.Fprintf(os.Stderr, "%s\n", "cancelled transaction")
 			return err
 		}
-	}
+	// }
+
+	fmt.Println("Setting fee gratner")
+	fmt.Println(clientCtx.GetFeeGranterAddress())
 
 	tx.SetFeeGranter(clientCtx.GetFeeGranterAddress())
 	err = Sign(txf, clientCtx.GetFromName(), tx, true)
 	if err != nil {
 		return err
 	}
+	fmt.Println("Signed!")
+	fmt.Println(tx.GetTx())
 
 	txBytes, err := clientCtx.TxConfig.TxEncoder()(tx.GetTx())
 	if err != nil {
 		return err
 	}
+	fmt.Println("got bytes")
+	fmt.Println(txBytes)
+
+	// clientCtx.TxConfig.TxDecoder()
 
 	// broadcast to a Tendermint node
 	res, err := clientCtx.BroadcastTx(txBytes)
@@ -332,6 +342,8 @@ func checkMultipleSigners(mode signing.SignMode, tx authsigning.Tx) error {
 // return an error.
 // An error is returned upon failure.
 func Sign(txf Factory, name string, txBuilder client.TxBuilder, overwriteSig bool) error {
+
+		fmt.Println("oh hey, it's me!")
 	if txf.keybase == nil {
 		return errors.New("keybase must be set prior to signing a transaction")
 	}

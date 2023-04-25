@@ -9,14 +9,14 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"reflect"
-	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	// "reflect"
+	// "context"
+	// "crypto/ecdsa"
+	// "crypto/elliptic"
 	"github.com/btcsuite/btcd/btcec"
-	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	// "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	"golang.org/x/crypto/blake2b"
-	"crypto/sha256"
+	// "crypto/sha256"
 	"github.com/cosmos/cosmos-sdk/crypto/keys"
 	"math/big"
 
@@ -25,8 +25,8 @@ import (
 	"github.com/pkg/errors"
 	tmcrypto "github.com/tendermint/tendermint/crypto"
 
-	 "github.com/ecadlabs/signatory/pkg/cryptoutils"
-	yubiSig "github.com/ecadlabs/signatory/pkg/vault/yubi"
+	//  "github.com/ecadlabs/signatory/pkg/cryptoutils"
+	// yubiSig "github.com/ecadlabs/signatory/pkg/vault/yubi"
 	"github.com/cosmos/cosmos-sdk/client/input"
 	"github.com/cosmos/cosmos-sdk/codec/legacy"
 	"github.com/cosmos/cosmos-sdk/crypto"
@@ -366,6 +366,13 @@ func (ks keystore) Sign(uid string, msg []byte) ([]byte, types.PubKey, error) {
 		return nil, nil, err
 	}
 
+
+	fmt.Println("KEYZZZZ PLZZZZ and i'm in the same")
+	fmt.Println(uid)
+	fmt.Println(info.GetName())
+
+	// panic("how did I get here!")
+
 	var priv types.PrivKey
 
 	switch i := info.(type) {
@@ -402,6 +409,10 @@ func (ks keystore) SignByAddress(address sdk.Address, msg []byte) ([]byte, types
 	if err != nil {
 		return nil, nil, err
 	}
+
+	fmt.Println("KEYZZZZ PLZZZZ")
+	fmt.Println(address)
+	fmt.Println(key.GetName())
 
 	return ks.Sign(key.GetName(), msg)
 }
@@ -653,111 +664,133 @@ func (ks keystore) SupportedAlgorithms() (SigningAlgoList, SigningAlgoList, Sign
 }
 
 func SignWithYubi(info Info, msg []byte) (sig []byte, pub types.PubKey, err error) {
-	fmt.Println("sign!")
-	// fmt.Println(Info)
-	fmt.Println(msg)
-
-	config := &yubiSig.Config{
-		Address: "127.0.0.1:12345",
-		Password: "penalty humble cricket evidence resist siren offer mix submit pool swarm donkey amount cabin property joke crisp joy income little erase decrease absent onion",
-		AuthKeyID: 1,
-		KeyImportDomains: 1,
+	switch info.(type) {
+	case *yubiInfo, yubiInfo:
+	default:
+		return nil, nil, errors.New("not a yubi object")
 	}
 
-	hsm, err := yubiSig.New(context.Background(), config)
+	priv, err := yubi.NewPrivKeySecp256k1Unsafe()
+	if err != nil {
+		return
+	}
+
+	sig, err = priv.Sign(msg)
 	if err != nil {
 		return nil, nil, err
 	}
-	fmt.Println("got key!")
 
-	key, err := hsm.GetPublicKey(context.Background(), "0af8") // Tezos, for now
-	if err != nil {
-		return nil, nil, fmt.Errorf("Could not connect to yubi", err)
-	}
-	fmt.Println("connected!")
-
-	// Get public key
-
-	pubKey, ok := key.PublicKey().(*ecdsa.PublicKey)
-	if !ok {
-		return nil, nil, fmt.Errorf("Could not assert the public key to secp public key")
-	}
-	fmt.Println("ok!")
-
-	pubKeyBytes := elliptic.Marshal(pubKey, pubKey.X, pubKey.Y)
-	fmt.Println("alright!")
-
-	// re-serialize in the 33-byte compressed format
-	cmp, err := btcec.ParsePubKey(pubKeyBytes, btcec.S256())
-	if err != nil {
-		return nil, nil, fmt.Errorf("error parsing public key: %v", err)
-	}
-
-	compressedPublicKey := make([]byte, secp256k1.PubKeySize)
-	copy(compressedPublicKey, cmp.SerializeCompressed())
-	fmt.Println("ok!")
-
-	pubkey := &secp256k1.PubKey{Key: compressedPublicKey}
-
-	// Get sig by making a digest
-
-	h := sha256.New()
-	h.Write(msg)
-	digest := h.Sum(nil)
-	fmt.Println(`Digest`)
-	fmt.Println(digest)
-
-	// digest := Digest(msg)
-	// fmt.Println("digested")
-
-	signature, err := hsm.Sign(context.Background(), digest[:], key)
-	if err != nil {
-		return nil, nil, err
-	}
-	fmt.Println("signature")
-	fmt.Println(reflect.TypeOf(signature))
-	fmt.Println(reflect.ValueOf(signature).Kind())
-	fmt.Println(signature.String())
+	return sig, priv.PubKey(), nil
 
 
-	casted, ok := signature.(*cryptoutils.ECDSASignature)
-	if !ok {
-		return nil, nil, fmt.Errorf("Could not assert the sig")
-	}
-	fmt.Println("ok!")
+	// This actually works
 
-		// This works but is fucked becuase we encode lengths wrong
-	// derFormat := "30440220" + casted.R.Text(16) + "0220" + casted.S.Text(16)
-	// fmt.Println(derFormat)
+	// fmt.Println("sign!")
+	// // fmt.Println(Info)
+	// fmt.Println(msg)
 
+	// config := &yubiSig.Config{
+	// 	Address: "127.0.0.1:12345",
+	// 	Password: "penalty humble cricket evidence resist siren offer mix submit pool swarm donkey amount cabin property joke crisp joy income little erase decrease absent onion",
+	// 	AuthKeyID: 1,
+	// 	KeyImportDomains: 1,
+	// }
 
-	// derBinary, err := hex.DecodeString(derFormat)
-	// 	if err != nil {
+	// hsm, err := yubiSig.New(context.Background(), config)
+	// if err != nil {
 	// 	return nil, nil, err
 	// }
+	// fmt.Println("got key!")
 
-
-	// canon, err := convertDERtoBER(derBinary)
+	// key, err := hsm.GetPublicKey(context.Background(), "0af8") // Tezos, for now
 	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return nil, nil, fmt.Errorf("Cannot make cannon.")
+	// 	return nil, nil, fmt.Errorf("Could not connect to yubi", err)
+	// }
+	// fmt.Println("connected!")
+
+	// // Get public key
+
+	// pubKey, ok := key.PublicKey().(*ecdsa.PublicKey)
+	// if !ok {
+	// 	return nil, nil, fmt.Errorf("Could not assert the public key to secp public key")
+	// }
+	// fmt.Println("ok!")
+
+	// pubKeyBytes := elliptic.Marshal(pubKey, pubKey.X, pubKey.Y)
+	// fmt.Println("alright!")
+
+	// // re-serialize in the 33-byte compressed format
+	// cmp, err := btcec.ParsePubKey(pubKeyBytes, btcec.S256())
+	// if err != nil {
+	// 	return nil, nil, fmt.Errorf("error parsing public key: %v", err)
 	// }
 
-	// fmt.Println("canon is") 
-	// fmt.Println(canon)
+	// compressedPublicKey := make([]byte, secp256k1.PubKeySize)
+	// copy(compressedPublicKey, cmp.SerializeCompressed())
+	// fmt.Println("ok!")
+
+	// pubkey := &secp256k1.PubKey{Key: compressedPublicKey}
+
+	// // Get sig by making a digest
+
+	// h := sha256.New()
+	// h.Write(msg)
+	// digest := h.Sum(nil)
+	// fmt.Println(`Digest`)
+	// fmt.Println(digest)
+
+	// // digest := Digest(msg)
+	// // fmt.Println("digested")
+
+	// signature, err := hsm.Sign(context.Background(), digest[:], key)
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
+	// fmt.Println("signature")
+	// fmt.Println(reflect.TypeOf(signature))
+	// fmt.Println(reflect.ValueOf(signature).Kind())
+	// fmt.Println(signature.String())
 
 
-	canonCheckString := cryptoutils.CanonizeECDSASignature(casted)
+	// casted, ok := signature.(*cryptoutils.ECDSASignature)
+	// if !ok {
+	// 	return nil, nil, fmt.Errorf("Could not assert the sig")
+	// }
+	// fmt.Println("ok!")
+
+	// 	// This works but is fucked becuase we encode lengths wrong
+	// // derFormat := "30440220" + casted.R.Text(16) + "0220" + casted.S.Text(16)
+	// // fmt.Println(derFormat)
 
 
-	canonCheck, err := hex.DecodeString( canonCheckString.R.Text(16) + canonCheckString.S.Text(16))
-	if err != nil {
-		return nil, nil, err
-	}
-	fmt.Println("check is")
-	fmt.Println(canonCheck)
+	// // derBinary, err := hex.DecodeString(derFormat)
+	// // 	if err != nil {
+	// // 	return nil, nil, err
+	// // }
 
-	return canonCheck, pubkey, nil
+
+	// // canon, err := convertDERtoBER(derBinary)
+	// // if err != nil {
+	// // 	fmt.Println(err)
+	// // 	return nil, nil, fmt.Errorf("Cannot make cannon.")
+	// // }
+
+	// // fmt.Println("canon is") 
+	// // fmt.Println(canon)
+
+
+	// canonCheckString := cryptoutils.CanonizeECDSASignature(casted)
+
+
+	// canonCheck, err := hex.DecodeString( canonCheckString.R.Text(16) + canonCheckString.S.Text(16))
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
+	// fmt.Println("check is")
+	// fmt.Println(canonCheck)
+
+
+	// return canonCheck, pubkey, nil
 
 
 	// return sig, &secp256k1.PubKey{Key: compressedPublicKey}, nil

@@ -21,14 +21,19 @@ import (
 // an intermediate structure which is logged if the context has a logger
 // defined.
 func (ctx Context) BroadcastTx(txBytes []byte) (res *sdk.TxResponse, err error) {
+	fmt.Println("ohhhh")
 	switch ctx.BroadcastMode {
 	case flags.BroadcastSync:
+
+		fmt.Println("1")
 		res, err = ctx.BroadcastTxSync(txBytes)
 
 	case flags.BroadcastAsync:
+		fmt.Println("2")
 		res, err = ctx.BroadcastTxAsync(txBytes)
 
 	case flags.BroadcastBlock:
+		fmt.Println("3")
 		res, err = ctx.BroadcastTxCommit(txBytes)
 
 	default:
@@ -47,6 +52,7 @@ func (ctx Context) BroadcastTx(txBytes []byte) (res *sdk.TxResponse, err error) 
 // a change to Tendermint's RPCError type to allow retrieval or matching against
 // a concrete error type.
 func CheckTendermintError(err error, tx tmtypes.Tx) *sdk.TxResponse {
+	fmt.Println("Looking for error")
 	if err == nil {
 		return nil
 	}
@@ -93,8 +99,11 @@ func (ctx Context) BroadcastTxCommit(txBytes []byte) (*sdk.TxResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("Got a node")
 
 	res, err := node.BroadcastTxCommit(context.Background(), txBytes)
+	fmt.Println(res)
+	fmt.Println(err)
 	if err == nil {
 		return sdk.NewResponseFormatBroadcastTxCommit(res), nil
 	}
@@ -112,6 +121,8 @@ func (ctx Context) BroadcastTxSync(txBytes []byte) (*sdk.TxResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Println("Check cehck")
 
 	res, err := node.BroadcastTxSync(context.Background(), txBytes)
 	if errRes := CheckTendermintError(err, txBytes); errRes != nil {

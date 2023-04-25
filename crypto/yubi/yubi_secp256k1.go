@@ -6,12 +6,19 @@ import (
 	"crypto/ecdsa"
 "crypto/elliptic"
 "reflect"
+"encoding/hex"
+
 
 	"github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/ecadlabs/signatory/pkg/vault/yubi"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	"crypto/sha256"
+	// "github.com/btcsuite/btcd/btcec"
 
+	"github.com/ecadlabs/signatory/pkg/cryptoutils"
+
+	// "github.com/cosmos/cosmos-sdk/codec"
 )
 
 
@@ -41,6 +48,7 @@ func NewPrivKeySecp256k1Unsafe() (types.LedgerPrivKey, error) {
 
 	return PrivKeyYubiSecp256k1{
 		CachedPubKey: pubkey,
+		// hsm: hsm,
 	}, nil
 }
 
@@ -92,6 +100,8 @@ type PrivKeyYubiSecp256k1 struct {
 	// go-amino so we can view the address later, even without having the
 	// ledger attached.
 	CachedPubKey types.PubKey
+
+	hsm *yubi.HSM
 }
 
 // PubKey returns the cached public key.
@@ -100,17 +110,76 @@ func (pkl PrivKeyYubiSecp256k1) PubKey() types.PubKey {
 }
 
 func (pkl PrivKeyYubiSecp256k1) Bytes() []byte {
-	panic("can't get bytes of yubi")
+	return cdc.MustMarshal(pkl)
 }
 
 func (pkl PrivKeyYubiSecp256k1) Equals(other types.LedgerPrivKey) bool {
-	return other.PubKey().Equals(pkl.PubKey())
+	if otherKey, ok := other.(PrivKeyYubiSecp256k1); ok {
+		return pkl.CachedPubKey.Equals(otherKey.CachedPubKey)
+	}
+	return false
 }
 
 func (pkl PrivKeyYubiSecp256k1) Sign(msg []byte) ([]byte, error) {
-	panic("you should impl this later")
+	config := &yubi.Config{
+		Address: "127.0.0.1:12345",
+		Password: "penalty humble cricket evidence resist siren offer mix submit pool swarm donkey amount cabin property joke crisp joy income little erase decrease absent onion",
+		AuthKeyID: 1,
+		KeyImportDomains: 1,
+	}
 
+	hsm, err := yubi.New(context.Background(), config)
+	if err != nil {
+		return nil, err
+	}
+
+	h := sha256.New()
+	h.Write(msg)
+	digest := h.Sum(nil)
+	fmt.Println(`Digest`)
+	fmt.Println(digest)
+
+	// digest := Digest(msg)
+	// fmt.Println("digested")
+
+	publicKey, err := hsm.GetPublicKey(context.Background(), "0af8") // Tezos, for now
+	if err != nil {
+		return nil, fmt.Errorf("Could not connect to yubi", err)
+	}
+	fmt.Println("win")
+
+
+	signature, err := hsm.Sign(context.Background(), digest[:], publicKey)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("signature")
+	fmt.Println(reflect.TypeOf(signature))
+	fmt.Println(reflect.ValueOf(signature).Kind())
+	fmt.Println(signature.String())
+
+
+	casted, ok := signature.(*cryptoutils.ECDSASignature)
+	if !ok {
+		return nil, fmt.Errorf("Could not assert the sig")
+	}
+	fmt.Println("ok!")
+
+	canonCheckString := cryptoutils.CanonizeECDSASignature(casted)
+
+	// btcec.NewSignature(canonCheckString.R, canonCheckString.S)
+
+
+	canonCheck, err := hex.DecodeString( canonCheckString.R.Text(16) + canonCheckString.S.Text(16))
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("check is")
+	fmt.Println(canonCheck)
+
+
+	return canonCheck, nil
 }
 func (pkl PrivKeyYubiSecp256k1)  Type() string {
-	return "yubihsm2"
+	return "PrivKeyYubiSecp256k1"
 }
