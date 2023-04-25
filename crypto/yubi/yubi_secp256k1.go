@@ -21,7 +21,7 @@ import (
 // This function is marked as unsafe as it will retrieve a pubkey without user verification.
 // It can only be used to verify a pubkey but never to create new accounts/keys. In that case,
 // please refer to NewPrivKeySecp256k1
-func NewPrivKeySecp256k1Unsafe() (types.YubiPrivKey, error) {
+func NewPrivKeySecp256k1Unsafe() (types.LedgerPrivKey, error) {
 	config := &yubi.Config{
 		Address: "127.0.0.1:12345",
 		Password: "penalty humble cricket evidence resist siren offer mix submit pool swarm donkey amount cabin property joke crisp joy income little erase decrease absent onion",
@@ -97,4 +97,20 @@ type PrivKeyYubiSecp256k1 struct {
 // PubKey returns the cached public key.
 func (pkl PrivKeyYubiSecp256k1) PubKey() types.PubKey {
 	return pkl.CachedPubKey
+}
+
+func (pkl PrivKeyYubiSecp256k1) Bytes() []byte {
+	panic("can't get bytes of yubi")
+}
+
+func (pkl PrivKeyYubiSecp256k1) Equals(other types.LedgerPrivKey) bool {
+	return other.PubKey().Equals(pkl.PubKey())
+}
+
+func (pkl PrivKeyYubiSecp256k1) Sign(msg []byte) ([]byte, error) {
+	panic("you should impl this later")
+
+}
+func (pkl PrivKeyYubiSecp256k1)  Type() string {
+	return "yubihsm2"
 }
