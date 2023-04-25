@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 "crypto/elliptic"
+"reflect"
 
 	"github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/ecadlabs/signatory/pkg/vault/yubi"
@@ -23,7 +24,7 @@ import (
 func NewPrivKeySecp256k1Unsafe() (types.YubiPrivKey, error) {
 	config := &yubi.Config{
 		Address: "127.0.0.1:12345",
-		Password: "",
+		Password: "penalty humble cricket evidence resist siren offer mix submit pool swarm donkey amount cabin property joke crisp joy income little erase decrease absent onion",
 		AuthKeyID: 1,
 		KeyImportDomains: 1,
 	}
@@ -38,7 +39,7 @@ func NewPrivKeySecp256k1Unsafe() (types.YubiPrivKey, error) {
 		return nil, err
 	}
 
-	return &PrivKeyYubiSecp256k1{
+	return PrivKeyYubiSecp256k1{
 		CachedPubKey: pubkey,
 	}, nil
 }
@@ -52,17 +53,25 @@ func NewPrivKeySecp256k1Unsafe() (types.YubiPrivKey, error) {
 // since this involves IO, it may return an error, which is not exposed
 // in the PubKey interface, so this function allows better error handling
 func getPubKeyUnsafe(hsm *yubi.HSM) (types.PubKey, error) {
-	publicKey, err := hsm.GetPublicKey(context.Background(), "1729") // Tezos, for now
+	fmt.Println("meybe")
+	publicKey, err := hsm.GetPublicKey(context.Background(), "0af8") // Tezos, for now
 	if err != nil {
 		return nil, fmt.Errorf("Could not connect to yubi", err)
 	}
+	fmt.Println("win")
 
 	// publicKey = storedKey.PublicKey()
-	pubKey, ok := publicKey.PublicKey().(ecdsa.PublicKey)
+	fmt.Printf("%+v\n", publicKey.PublicKey())
+	fmt.Println(reflect.TypeOf(publicKey.PublicKey()))
+	fmt.Println(reflect.ValueOf(publicKey.PublicKey()).Kind())
+	pubKey, ok := publicKey.PublicKey().(*ecdsa.PublicKey)
 	if !ok {
-		fmt.Errorf("Could not assert the public key to ed25519 public key")
+		return nil, fmt.Errorf("Could not assert the public key to secp public key")
 	}
+	fmt.Println("ok!")
+
 	pubKeyBytes := elliptic.Marshal(pubKey, pubKey.X, pubKey.Y)
+	fmt.Println("alright!")
 
 	// re-serialize in the 33-byte compressed format
 	cmp, err := btcec.ParsePubKey(pubKeyBytes, btcec.S256())
@@ -72,6 +81,8 @@ func getPubKeyUnsafe(hsm *yubi.HSM) (types.PubKey, error) {
 
 	compressedPublicKey := make([]byte, secp256k1.PubKeySize)
 	copy(compressedPublicKey, cmp.SerializeCompressed())
+	fmt.Println(compressedPublicKey)
+
 
 	return &secp256k1.PubKey{Key: compressedPublicKey}, nil
 }

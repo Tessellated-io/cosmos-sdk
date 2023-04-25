@@ -1,6 +1,7 @@
 package codec
 
 import (
+	"fmt"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -34,6 +35,7 @@ func (ac *AminoCodec) MarshalLengthPrefixed(o ProtoMarshaler) ([]byte, error) {
 
 // MustMarshalLengthPrefixed implements BinaryMarshaler.MustMarshalLengthPrefixed method.
 func (ac *AminoCodec) MustMarshalLengthPrefixed(o ProtoMarshaler) []byte {
+	fmt.Println("a")
 	return ac.LegacyAmino.MustMarshalLengthPrefixed(o)
 }
 
