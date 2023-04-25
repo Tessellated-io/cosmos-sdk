@@ -62,7 +62,6 @@ func MustMarshalJSONIndent(cdc *LegacyAmino, obj interface{}) []byte {
 }
 
 func (cdc *LegacyAmino) marshalAnys(o interface{}) error {
-	fmt.Println("still here!")
 	return types.UnpackInterfaces(o, types.AminoPacker{Cdc: cdc.Amino})
 }
 
@@ -95,8 +94,6 @@ func (cdc *LegacyAmino) MustMarshal(o interface{}) []byte {
 }
 
 func (cdc *LegacyAmino) MarshalLengthPrefixed(o interface{}) ([]byte, error) {
-	fmt.Println("c")
-
 	err := cdc.marshalAnys(o)
 	if err != nil {
 		return nil, err
@@ -105,8 +102,6 @@ func (cdc *LegacyAmino) MarshalLengthPrefixed(o interface{}) ([]byte, error) {
 }
 
 func (cdc *LegacyAmino) MustMarshalLengthPrefixed(o interface{}) []byte {
-	fmt.Println("b")
-
 	bz, err := cdc.MarshalLengthPrefixed(o)
 	if err != nil {
 		panic(err)
