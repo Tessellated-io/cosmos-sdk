@@ -69,6 +69,7 @@ Example:
 	f.String(FlagPublicKey, "", "Parse a public key in JSON format and saves key info to <name> file.")
 	f.BoolP(flagInteractive, "i", false, "Interactively prompt user for BIP39 passphrase and mnemonic")
 	f.Bool(flags.FlagUseLedger, false, "Store a local reference to a private key on a Ledger device")
+	f.Bool(flags.FlagUseYubiHsm, false, "Store a local reference to a private key on a YubiHSM2 device")
 	f.Bool(flagRecover, false, "Provide seed phrase to recover existing key instead of creating")
 	f.Bool(flagNoBackup, false, "Don't print out seed phrase (if others are watching the terminal)")
 	f.Bool(flags.FlagDryRun, false, "Perform action, but don't add key to local keystore")
@@ -111,7 +112,7 @@ func runAddCmd(ctx client.Context, cmd *cobra.Command, args []string, inBuf *buf
 	kb := ctx.Keyring
 	outputFormat := ctx.OutputFormat
 
-	keyringAlgos, _ := kb.SupportedAlgorithms()
+	keyringAlgos, _, _ := kb.SupportedAlgorithms()
 	algoStr, _ := cmd.Flags().GetString(flags.FlagKeyAlgorithm)
 	algo, err := keyring.NewSigningAlgoFromString(algoStr, keyringAlgos)
 	if err != nil {
@@ -194,11 +195,12 @@ func runAddCmd(ctx client.Context, cmd *cobra.Command, args []string, inBuf *buf
 	index, _ := cmd.Flags().GetUint32(flagIndex)
 	hdPath, _ := cmd.Flags().GetString(flagHDPath)
 	useLedger, _ := cmd.Flags().GetBool(flags.FlagUseLedger)
+	useYubiHsm, _ := cmd.Flags().GetBool(flags.FlagUseYubiHsm)
 
 	if len(hdPath) == 0 {
 		hdPath = hd.CreateHDPath(coinType, account, index).String()
-	} else if useLedger {
-		return errors.New("cannot set custom bip32 path with ledger")
+	} else if useLedger || useYubiHsm {
+		return errors.New("cannot set custom bip32 path with ledger or yubi")
 	}
 
 	// If we're using ledger, only thing we need is the path and the bech32 prefix.
@@ -206,6 +208,16 @@ func runAddCmd(ctx client.Context, cmd *cobra.Command, args []string, inBuf *buf
 		bech32PrefixAccAddr := sdk.GetConfig().GetBech32AccountAddrPrefix()
 
 		info, err := kb.SaveLedgerKey(name, algo, bech32PrefixAccAddr, coinType, account, index)
+		if err != nil {
+			return err
+		}
+
+		return printCreate(cmd, info, false, "", outputFormat)
+	}
+	if useYubiHsm {
+		bech32PrefixAccAddr := sdk.GetConfig().GetBech32AccountAddrPrefix()
+
+		info, err := kb.SaveYubiHsm(name, algo, bech32PrefixAccAddr, coinType, account, index)
 		if err != nil {
 			return err
 		}
