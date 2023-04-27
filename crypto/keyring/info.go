@@ -32,7 +32,52 @@ var (
 	_ Info = &ledgerInfo{}
 	_ Info = &offlineInfo{}
 	_ Info = &multiInfo{}
+	_ Info = &yubiHsmInfo{}
 )
+
+type yubiHsmInfo struct {
+	Name         string             `json:"name"`
+	PubKey       cryptotypes.PubKey `json:"pubkey"`
+	Algo         hd.PubKeyType      `json:"algo"`
+}
+
+func newYubiHsmInfo(name string, pub cryptotypes.PubKey, algo hd.PubKeyType) Info {
+	return &yubiHsmInfo{
+		Name: name,
+		PubKey: pub,
+		Algo: algo,
+	}
+}
+
+// GetType implements Info interface
+func (i yubiHsmInfo) GetType() KeyType {
+	return TypeYubiHsm
+}
+
+// GetType implements Info interface
+func (i yubiHsmInfo) GetName() string {
+	return i.Name
+}
+
+// GetType implements Info interface
+func (i yubiHsmInfo) GetPubKey() cryptotypes.PubKey {
+	return i.PubKey
+}
+
+// GetType implements Info interface
+func (i yubiHsmInfo) GetAddress() types.AccAddress {
+	return i.PubKey.Address().Bytes()
+}
+
+// GetType implements Info interface
+func (i yubiHsmInfo) GetAlgo() hd.PubKeyType {
+	return i.Algo
+}
+
+// GetType implements Info interface
+func (i yubiHsmInfo) GetPath() (*hd.BIP44Params, error) {
+	return nil, fmt.Errorf("BIP44 Paths are not available for this type")
+}
 
 // localInfo is the public information about a locally stored key
 // Note: Algo must be last field in struct for backwards amino compatibility
