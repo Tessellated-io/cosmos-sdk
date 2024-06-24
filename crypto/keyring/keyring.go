@@ -9,12 +9,24 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	// "reflect"
+	// "context"
+	// "crypto/ecdsa"
+	// "crypto/elliptic"
+	"github.com/btcsuite/btcd/btcec"
+	// "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	"golang.org/x/crypto/blake2b"
+	// "crypto/sha256"
+	"github.com/cosmos/cosmos-sdk/crypto/keys"
+	"math/big"
 
 	"github.com/99designs/keyring"
 	bip39 "github.com/cosmos/go-bip39"
 	"github.com/pkg/errors"
 	tmcrypto "github.com/tendermint/tendermint/crypto"
 
+	//  "github.com/ecadlabs/signatory/pkg/cryptoutils"
+	// yubiSig "github.com/ecadlabs/signatory/pkg/vault/yubi"
 	"github.com/cosmos/cosmos-sdk/client/input"
 	"github.com/cosmos/cosmos-sdk/codec/legacy"
 	"github.com/cosmos/cosmos-sdk/crypto"
@@ -22,9 +34,13 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/keys/bcrypt"
 	"github.com/cosmos/cosmos-sdk/crypto/ledger"
 	"github.com/cosmos/cosmos-sdk/crypto/types"
+	"github.com/cosmos/cosmos-sdk/crypto/yubi"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 )
+
+var Digest = blake2b.Sum256
+
 
 // Backend options for Keyring
 const (
@@ -53,7 +69,7 @@ type Keyring interface {
 	List() ([]Info, error)
 
 	// Supported signing algorithms for Keyring and Ledger respectively.
-	SupportedAlgorithms() (SigningAlgoList, SigningAlgoList)
+	SupportedAlgorithms() (SigningAlgoList, SigningAlgoList, SigningAlgoList)
 
 	// Key and KeyByAddress return keys by uid and address respectively.
 	Key(uid string) (Info, error)
@@ -77,6 +93,8 @@ type Keyring interface {
 
 	// SaveLedgerKey retrieves a public key reference from a Ledger device and persists it.
 	SaveLedgerKey(uid string, algo SignatureAlgo, hrp string, coinType, account, index uint32) (Info, error)
+
+	SaveYubiKey(uid string, algo SignatureAlgo, hrp string, coinType, account, index uint32) (Info, error)
 
 	// SavePubKey stores a public key and returns the persisted Info structure.
 	SavePubKey(uid string, pubkey types.PubKey, algo hd.PubKeyType) (Info, error)
@@ -150,6 +168,8 @@ type Options struct {
 	SupportedAlgos SigningAlgoList
 	// supported signing algorithms for Ledger
 	SupportedAlgosLedger SigningAlgoList
+	// supported signing algorithms for YubiKey
+	SupportedAlgosYubi SigningAlgoList
 }
 
 // NewInMemory creates a transient keyring useful for testing
@@ -204,6 +224,7 @@ func newKeystore(kr keyring.Keyring, opts ...Option) keystore {
 	options := Options{
 		SupportedAlgos:       SigningAlgoList{hd.Secp256k1},
 		SupportedAlgosLedger: SigningAlgoList{hd.Secp256k1},
+		SupportedAlgosYubi:	  SigningAlgoList{hd.Secp256k1},
 	}
 
 	for _, optionFn := range opts {
@@ -270,7 +291,7 @@ func (ks keystore) ExportPrivateKeyObject(uid string) (types.PrivKey, error) {
 			return nil, err
 		}
 
-	case ledgerInfo, offlineInfo, multiInfo:
+	case ledgerInfo, offlineInfo, multiInfo, yubiInfo:
 		return nil, errors.New("only works on local private keys")
 	}
 
@@ -337,10 +358,20 @@ func (ks keystore) ImportInfo(oldInfo Info) error {
 }
 
 func (ks keystore) Sign(uid string, msg []byte) ([]byte, types.PubKey, error) {
+	fmt.Println("ok!")
+
+
 	info, err := ks.Key(uid)
 	if err != nil {
 		return nil, nil, err
 	}
+
+
+	fmt.Println("KEYZZZZ PLZZZZ and i'm in the same")
+	fmt.Println(uid)
+	fmt.Println(info.GetName())
+
+	// panic("how did I get here!")
 
 	var priv types.PrivKey
 
@@ -357,6 +388,9 @@ func (ks keystore) Sign(uid string, msg []byte) ([]byte, types.PubKey, error) {
 
 	case ledgerInfo:
 		return SignWithLedger(info, msg)
+
+	case yubiInfo:
+		return SignWithYubi(info, msg)
 
 	case offlineInfo, multiInfo:
 		return nil, info.GetPubKey(), errors.New("cannot sign with offline keys")
@@ -376,7 +410,28 @@ func (ks keystore) SignByAddress(address sdk.Address, msg []byte) ([]byte, types
 		return nil, nil, err
 	}
 
+	fmt.Println("KEYZZZZ PLZZZZ")
+	fmt.Println(address)
+	fmt.Println(key.GetName())
+
 	return ks.Sign(key.GetName(), msg)
+}
+
+func (ks keystore) SaveYubiKey(uid string, algo SignatureAlgo, hrp string, coinType, account, index uint32) (Info, error) {
+	if !ks.options.SupportedAlgosYubi.Contains(algo) {
+		return nil, fmt.Errorf(
+			"%w: signature algo %s is not defined in the keyring options",
+			ErrUnsupportedSigningAlgo, algo.Name(),
+		)
+	}
+
+	priv, err := yubi.NewPrivKeySecp256k1Unsafe()
+	// priv, _, err := ledger.NewPrivKeySecp256k1(*hdPath, hrp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to yubihsm: %w", err)
+	}
+
+	return ks.writeYubiKey(uid, priv.PubKey(), algo.Name())
 }
 
 func (ks keystore) SaveLedgerKey(uid string, algo SignatureAlgo, hrp string, coinType, account, index uint32) (Info, error) {
@@ -399,6 +454,15 @@ func (ks keystore) SaveLedgerKey(uid string, algo SignatureAlgo, hrp string, coi
 
 func (ks keystore) writeLedgerKey(name string, pub types.PubKey, path hd.BIP44Params, algo hd.PubKeyType) (Info, error) {
 	info := newLedgerInfo(name, pub, path, algo)
+	if err := ks.writeInfo(info); err != nil {
+		return nil, err
+	}
+
+	return info, nil
+}
+
+func (ks keystore) writeYubiKey(name string, pub types.PubKey, algo hd.PubKeyType) (Info, error) {
+	info := newYubiInfo(name, pub, algo)
 	if err := ks.writeInfo(info); err != nil {
 		return nil, err
 	}
@@ -594,9 +658,165 @@ func (ks keystore) Key(uid string) (Info, error) {
 }
 
 // SupportedAlgorithms returns the keystore Options' supported signing algorithm.
-// for the keyring and Ledger.
-func (ks keystore) SupportedAlgorithms() (SigningAlgoList, SigningAlgoList) {
-	return ks.options.SupportedAlgos, ks.options.SupportedAlgosLedger
+// for the keyring, Ledger and YubiHSM2.
+func (ks keystore) SupportedAlgorithms() (SigningAlgoList, SigningAlgoList, SigningAlgoList) {
+	return ks.options.SupportedAlgos, ks.options.SupportedAlgosLedger, ks.options.SupportedAlgosYubi
+}
+
+func SignWithYubi(info Info, msg []byte) (sig []byte, pub types.PubKey, err error) {
+	switch info.(type) {
+	case *yubiInfo, yubiInfo:
+	default:
+		return nil, nil, errors.New("not a yubi object")
+	}
+
+	priv, err := yubi.NewPrivKeySecp256k1Unsafe()
+	if err != nil {
+		return
+	}
+
+	sig, err = priv.Sign(msg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return sig, priv.PubKey(), nil
+
+
+	// This actually works
+
+	// fmt.Println("sign!")
+	// // fmt.Println(Info)
+	// fmt.Println(msg)
+
+	// config := &yubiSig.Config{
+	// 	Address: "127.0.0.1:12345",
+	// 	Password: "penalty humble cricket evidence resist siren offer mix submit pool swarm donkey amount cabin property joke crisp joy income little erase decrease absent onion",
+	// 	AuthKeyID: 1,
+	// 	KeyImportDomains: 1,
+	// }
+
+	// hsm, err := yubiSig.New(context.Background(), config)
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
+	// fmt.Println("got key!")
+
+	// key, err := hsm.GetPublicKey(context.Background(), "0af8") // Tezos, for now
+	// if err != nil {
+	// 	return nil, nil, fmt.Errorf("Could not connect to yubi", err)
+	// }
+	// fmt.Println("connected!")
+
+	// // Get public key
+
+	// pubKey, ok := key.PublicKey().(*ecdsa.PublicKey)
+	// if !ok {
+	// 	return nil, nil, fmt.Errorf("Could not assert the public key to secp public key")
+	// }
+	// fmt.Println("ok!")
+
+	// pubKeyBytes := elliptic.Marshal(pubKey, pubKey.X, pubKey.Y)
+	// fmt.Println("alright!")
+
+	// // re-serialize in the 33-byte compressed format
+	// cmp, err := btcec.ParsePubKey(pubKeyBytes, btcec.S256())
+	// if err != nil {
+	// 	return nil, nil, fmt.Errorf("error parsing public key: %v", err)
+	// }
+
+	// compressedPublicKey := make([]byte, secp256k1.PubKeySize)
+	// copy(compressedPublicKey, cmp.SerializeCompressed())
+	// fmt.Println("ok!")
+
+	// pubkey := &secp256k1.PubKey{Key: compressedPublicKey}
+
+	// // Get sig by making a digest
+
+	// h := sha256.New()
+	// h.Write(msg)
+	// digest := h.Sum(nil)
+	// fmt.Println(`Digest`)
+	// fmt.Println(digest)
+
+	// // digest := Digest(msg)
+	// // fmt.Println("digested")
+
+	// signature, err := hsm.Sign(context.Background(), digest[:], key)
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
+	// fmt.Println("signature")
+	// fmt.Println(reflect.TypeOf(signature))
+	// fmt.Println(reflect.ValueOf(signature).Kind())
+	// fmt.Println(signature.String())
+
+
+	// casted, ok := signature.(*cryptoutils.ECDSASignature)
+	// if !ok {
+	// 	return nil, nil, fmt.Errorf("Could not assert the sig")
+	// }
+	// fmt.Println("ok!")
+
+	// 	// This works but is fucked becuase we encode lengths wrong
+	// // derFormat := "30440220" + casted.R.Text(16) + "0220" + casted.S.Text(16)
+	// // fmt.Println(derFormat)
+
+
+	// // derBinary, err := hex.DecodeString(derFormat)
+	// // 	if err != nil {
+	// // 	return nil, nil, err
+	// // }
+
+
+	// // canon, err := convertDERtoBER(derBinary)
+	// // if err != nil {
+	// // 	fmt.Println(err)
+	// // 	return nil, nil, fmt.Errorf("Cannot make cannon.")
+	// // }
+
+	// // fmt.Println("canon is") 
+	// // fmt.Println(canon)
+
+
+	// canonCheckString := cryptoutils.CanonizeECDSASignature(casted)
+
+
+	// canonCheck, err := hex.DecodeString( canonCheckString.R.Text(16) + canonCheckString.S.Text(16))
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
+	// fmt.Println("check is")
+	// fmt.Println(canonCheck)
+
+
+	// return canonCheck, pubkey, nil
+
+
+	// return sig, &secp256k1.PubKey{Key: compressedPublicKey}, nil
+}
+
+func convertDERtoBER(signatureDER []byte) ([]byte, error) {
+	sigDER, err := btcec.ParseDERSignature(signatureDER, btcec.S256())
+	if err != nil {
+		return nil, err
+	}
+
+	// based on https://github.com/tendermint/btcd/blob/ec996c5/btcec/signature.go#L33-L50
+	// low 'S' malleability breaker
+	sigS := sigDER.S
+	if keys.IsOverHalfOrder(sigS) {
+		sigS = new(big.Int).Sub(btcec.S256().N, sigS)
+	}
+
+	rBytes := sigDER.R.Bytes()
+	sBytes := sigS.Bytes()
+	sigBytes := make([]byte, 64)
+	// 0 pad the byte arrays from the left if they aren't big enough.
+	copy(sigBytes[32-len(rBytes):32], rBytes)
+	copy(sigBytes[64-len(sBytes):64], sBytes)
+
+	return sigBytes, nil
 }
 
 // SignWithLedger signs a binary message with the ledger device referenced by an Info object
@@ -761,6 +981,7 @@ func newRealPrompt(dir string, buf io.Reader) func(string) (string, error) {
 	}
 }
 
+
 func (ks keystore) writeLocalKey(name string, priv types.PrivKey, algo hd.PubKeyType) (Info, error) {
 	// encrypt private key using keyring
 	pub := priv.PubKey()
@@ -772,9 +993,15 @@ func (ks keystore) writeLocalKey(name string, priv types.PrivKey, algo hd.PubKey
 	return info, nil
 }
 
+// 0A06 6B6565666572 					1226EB5AE98721 028D1E2941BC9E80AD9CFA7DEBA1B25FCB589EA0FCA9BC17731BEA318676D38FA5 1A09736563703235366B31 
+// ??   keefer (key name?)    				 KEY																																??
+
 func (ks keystore) writeInfo(info Info) error {
 	key := infoKeyBz(info.GetName())
+	fmt.Println(key)
+
 	serializedInfo := marshalInfo(info)
+	fmt.Println(serializedInfo)
 
 	exists, err := ks.existsInDb(info)
 	if err != nil {

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -43,9 +44,12 @@ $ <appd> tx broadcast ./mytxn.json
 			if err != nil {
 				return err
 			}
+			fmt.Println("Got tx bytes ")
+			fmt.Println(txBytes)
 
 			res, err := clientCtx.BroadcastTx(txBytes)
 			if err != nil {
+				fmt.Println("Got error!")
 				return err
 			}
 

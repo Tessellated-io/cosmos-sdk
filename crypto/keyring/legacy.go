@@ -121,7 +121,7 @@ func (kb dbKeybase) ExportPrivateKeyObject(name string, passphrase string) (type
 			return nil, err
 		}
 
-	case ledgerInfo, offlineInfo, multiInfo:
+	case ledgerInfo, offlineInfo, multiInfo, yubiInfo:
 		return nil, errors.New("only works on local private keys")
 	}
 

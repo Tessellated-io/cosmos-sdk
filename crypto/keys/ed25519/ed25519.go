@@ -88,6 +88,7 @@ func (privKey *PrivKey) Equals(other cryptotypes.LedgerPrivKey) bool {
 	return subtle.ConstantTimeCompare(privKey.Bytes(), other.Bytes()) == 1
 }
 
+
 func (privKey *PrivKey) Type() string {
 	return keyType
 }
